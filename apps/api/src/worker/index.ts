@@ -67,6 +67,9 @@ export default {
       if (source && method === "GET") return withPermission(env, source[1]!, actor, "view", () => getSource(env, source[1]!));
       if (source && method === "PUT") return withPermission(env, source[1]!, actor, "edit", () => putSource(request, env, source[1]!, actor));
 
+      const exportDoc = path.match(/^\/documents\/([^/]+)\/export$/);
+      if (exportDoc && method === "GET") return withPermission(env, exportDoc[1]!, actor, "view", () => exportSource(env, exportDoc[1]!, url.searchParams.get("format") ?? "mdx"));
+
       const tree = path.match(/^\/documents\/([^/]+)\/tree$/);
       if (tree && method === "GET") return withPermission(env, tree[1]!, actor, "view", () => getTree(env, tree[1]!));
 
@@ -220,6 +223,13 @@ async function getSource(env: Env, id: string) {
   const source = await new ArtifactStore(env.ARTIFACTS).readText({ repoName: row.artifact_repo, remote: row.artifact_remote ?? undefined, commit: row.artifact_commit, path: row.latest_source_key });
   return json({ documentId: row.id, version: row.current_version, source });
 }
+async function exportSource(env: Env, id: string, format: string) {
+  const source = await getSource(env, id);
+  if (!source.ok) return source;
+  const payload = await source.clone().json() as { documentId: string; version: number; source: string };
+  return json({ ...payload, format: format === "md" ? "md" : "mdx" });
+}
+
 async function putSource(request: Request, env: Env, id: string, _actor: Actor) {
   const body = await readJson<{ baseVersion: number; source: string }>(request);
   const doc = await repos(env).documents.getForSource(id);

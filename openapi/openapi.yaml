@@ -96,6 +96,16 @@ paths:
         - $ref: '#/components/parameters/DocumentId'
       responses:
         '200': { description: OK }
+  /documents/{documentId}/export:
+    get:
+      summary: Export document source
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - name: format
+          in: query
+          schema: { type: string, enum: [md, mdx], default: mdx }
+      responses:
+        '200': { description: OK }
   /documents/{documentId}/session:
     get:
       summary: Get y-partyserver collaboration connection metadata

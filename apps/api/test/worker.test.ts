@@ -120,6 +120,9 @@ describe("worker integration with local D1/Artifacts fakes", () => {
 
     const source = await json(await worker.fetch(new Request(`http://local/api/v1/documents/${created.id}/source`), e, ctx()));
     expect(source.source).toBe("# Launch\n");
+    const exported = await json(await worker.fetch(new Request(`http://local/api/v1/documents/${created.id}/export?format=mdx`), e, ctx()));
+    expect(exported.source).toBe("# Launch\n");
+    expect(exported.format).toBe("mdx");
   });
 
   it("permission-gates comments and creates first-class comment records", async () => {

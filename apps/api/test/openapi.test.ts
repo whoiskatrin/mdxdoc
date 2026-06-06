@@ -12,6 +12,7 @@ const requiredPaths = [
   ["delete", "/documents/{documentId}"],
   ["get", "/documents/{documentId}/source"],
   ["put", "/documents/{documentId}/source"],
+  ["get", "/documents/{documentId}/export"],
   ["post", "/documents/{documentId}/preview"],
   ["get", "/documents/{documentId}/comments"],
   ["post", "/documents/{documentId}/comments"],

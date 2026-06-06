@@ -12,7 +12,10 @@ async function run(args: string[]) {
 describe("mdxdoc CLI smoke", () => {
   it("prints top-level commands", async () => {
     const { stdout } = await run(["--help"]);
+    expect(stdout).toContain("login");
+    expect(stdout).toContain("whoami");
     expect(stdout).toContain("docs");
+    expect(stdout).toContain("propose");
     expect(stdout).toContain("comment");
     expect(stdout).toContain("suggestion");
     expect(stdout).toContain("changeset");

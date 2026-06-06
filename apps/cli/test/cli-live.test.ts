@@ -31,7 +31,8 @@ maybe("mdxdoc CLI live smoke", () => {
     const next = join(dir, "next.mdx");
     await writeFile(next, "# CLI smoke update\n");
     const suggestion = await run(["push", created.id, next]);
-    expect(suggestion.mode).toBe("suggest");
+    expect(suggestion.mode).toBe("changeset");
+    expect(suggestion.changeset.id).toBeTruthy();
 
     const versions = await run(["versions", created.id]);
     expect(versions.items.length).toBeGreaterThan(0);

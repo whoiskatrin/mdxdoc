@@ -215,38 +215,44 @@ CLI live smoke: passing when env var is set
 
 ## CLI examples
 
+The CLI is a first-class client of the public API. `push` is safe by default: it creates a reviewable changeset plus suggestion. Direct overwrite requires `--apply`.
+
 ```bash
-# List workspaces
-pnpm exec tsx apps/cli/src/index.ts --api-url https://mdxdoc-api.agents-b8a.workers.dev workspaces
+mdxdoc login
+mdxdoc whoami
 
-# Create a document
-pnpm exec tsx apps/cli/src/index.ts --api-url https://mdxdoc-api.agents-b8a.workers.dev \
-  docs create "Launch Plan" --workspace <workspaceId>
+mdxdoc workspaces
+mdxdoc docs list
+mdxdoc docs create "Launch Plan"
 
-# Pull source
-pnpm exec tsx apps/cli/src/index.ts --api-url https://mdxdoc-api.agents-b8a.workers.dev \
-  pull <documentId> --out doc.mdx
+mdxdoc pull doc_123 --out launch.mdx
+mdxdoc push doc_123 launch.mdx
+mdxdoc push doc_123 launch.mdx --apply
+mdxdoc propose doc_123 launch.mdx --title "Rewrite launch plan"
 
-# Safe push: creates a suggestion by default
-pnpm exec tsx apps/cli/src/index.ts --api-url https://mdxdoc-api.agents-b8a.workers.dev \
-  push <documentId> doc.mdx
+mdxdoc comments doc_123
+mdxdoc comment add doc_123 --quote "launch date" --message "Is this final?"
+mdxdoc comment resolve cmt_123
 
-# Direct apply
-pnpm exec tsx apps/cli/src/index.ts --api-url https://mdxdoc-api.agents-b8a.workers.dev \
-  push <documentId> doc.mdx --apply
+mdxdoc suggestions doc_123
+mdxdoc suggestion accept sug_123
+mdxdoc suggestion reject sug_456
 
-# Comments
-pnpm exec tsx apps/cli/src/index.ts --api-url https://mdxdoc-api.agents-b8a.workers.dev comments <documentId>
-pnpm exec tsx apps/cli/src/index.ts --api-url https://mdxdoc-api.agents-b8a.workers.dev comment add <documentId> --message "Clarify this" --quote "important text"
+mdxdoc changesets doc_123
+mdxdoc changeset accept chg_123
+mdxdoc changeset reject chg_456
 
-# Suggestions
-pnpm exec tsx apps/cli/src/index.ts --api-url https://mdxdoc-api.agents-b8a.workers.dev suggestions <documentId>
-pnpm exec tsx apps/cli/src/index.ts --api-url https://mdxdoc-api.agents-b8a.workers.dev suggestion accept <suggestionId>
+mdxdoc versions doc_123
+mdxdoc restore doc_123 ver_10
 
-# Versions
-pnpm exec tsx apps/cli/src/index.ts --api-url https://mdxdoc-api.agents-b8a.workers.dev versions <documentId>
-pnpm exec tsx apps/cli/src/index.ts --api-url https://mdxdoc-api.agents-b8a.workers.dev checkpoint <documentId>
-pnpm exec tsx apps/cli/src/index.ts --api-url https://mdxdoc-api.agents-b8a.workers.dev restore <documentId> <versionId>
+mdxdoc preview doc_123
+mdxdoc export doc_123 --format mdx --out doc.mdx
+```
+
+When running from source, prefix with:
+
+```bash
+pnpm exec tsx apps/cli/src/index.ts
 ```
 
 ## API contract
