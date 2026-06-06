@@ -20,16 +20,20 @@ program
   .option("--json", "Print JSON output", true);
 
 program.command("health").description("Check API health").action(async () => output(await client().health()));
-program.command("login").description("Store API URL/token in config").option("--api-url <url>", "API URL", DEFAULT_API_URL).option("--token <token>", "API token", "local-dev-token").option("--user <user>", "User id", "local-user").action(async (opts) => {
-  await saveConfig({ ...loadConfigSync(), apiUrl: opts.apiUrl, token: opts.token, userId: opts.user });
+program.command("login").description("Store an agent API token in config").option("--api-url <url>", "API URL", DEFAULT_API_URL).option("--token <token>", "API token").option("--token-stdin", "Read API token from stdin").option("--user <user>", "Local label", "agent").action(async (opts) => {
+  const token = opts.tokenStdin ? readFileSync(0, "utf8").trim() : opts.token;
+  if (!token) throw new Error("Pass --token, --token-stdin, or use MDXDOC_TOKEN for non-persistent auth.");
+  await saveConfig({ ...loadConfigSync(), apiUrl: opts.apiUrl, token, userId: opts.user });
   output({ ok: true, apiUrl: opts.apiUrl, userId: opts.user });
 });
 program.command("logout").description("Clear local config").action(async () => { await saveConfig({}); output({ ok: true }); });
-program.command("whoami").description("Show active CLI identity/config").action(() => {
-  const config = loadConfigSync();
-  output({ userId: config.userId ?? "local-user", apiUrl: globals().apiUrl ?? config.apiUrl ?? DEFAULT_API_URL, authenticated: Boolean(globals().token ?? config.token), defaultWorkspaceId: config.defaultWorkspaceId ?? null });
-});
+program.command("whoami").description("Show active API principal").action(async () => output(await client().auth.whoami()));
 program.command("workspaces").description("List workspaces").action(async () => output(await client().workspaces.list()));
+const serviceAccounts = program.command("service-accounts").description("Agent service-account commands");
+serviceAccounts.command("create").requiredOption("--workspace <workspace>").requiredOption("--name <name>").action(async (opts) => output(await client().auth.createServiceAccount({ workspaceId: opts.workspace, name: opts.name })));
+const serviceAccount = program.command("service-account").description("Single service-account actions");
+serviceAccount.command("token").argument("<serviceAccountId>").option("--name <name>").option("--scope <scope...>").option("--expires-in-days <days>").action(async (serviceAccountId, opts) => output(await client().auth.createServiceAccountToken(serviceAccountId, { name: opts.name, scopes: opts.scope, ...(opts.expiresInDays ? { expiresInDays: Number(opts.expiresInDays) } : {}) })));
+
 
 const docs = program.command("docs").description("Document commands");
 docs.command("list").option("--workspace <workspace>", "Workspace id").action(async (opts) => output(await client().docs.list(await workspaceId(opts.workspace))));
@@ -142,8 +146,8 @@ function globals(): GlobalOpts { return program.opts<GlobalOpts>(); }
 function client(): MdxdocClient {
   const config = loadConfigSync();
   const opts = globals();
-  const token = opts.token ?? config.token;
-  return new MdxdocClient({ apiUrl: opts.apiUrl ?? config.apiUrl ?? DEFAULT_API_URL, ...(token ? { token } : {}) });
+  const token = opts.token ?? process.env.MDXDOC_TOKEN ?? config.token;
+  return new MdxdocClient({ apiUrl: opts.apiUrl ?? process.env.MDXDOC_API_URL ?? config.apiUrl ?? DEFAULT_API_URL, ...(token ? { token } : {}) });
 }
 function output(value: unknown) {
   console.log(JSON.stringify(value, null, 2));

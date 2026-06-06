@@ -20,6 +20,38 @@ export type CreateSuggestionInput = {
   baseVersion: number;
 };
 
+export class D1AuthRepository {
+  constructor(private readonly db: Db) {}
+
+  async createServiceAccount(input: { id: string; workspaceId: string; name: string; createdBy: string; now: string }) {
+    await this.db.prepare("INSERT INTO service_accounts (id, workspace_id, name, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(input.id, input.workspaceId, input.name, input.createdBy, input.now, input.now)
+      .run();
+    return { id: input.id, workspaceId: input.workspaceId, name: input.name, createdBy: input.createdBy, createdAt: input.now, updatedAt: input.now };
+  }
+
+  async createToken(input: { id: string; principalType: "service_account" | "user"; principalId: string; tokenHash: string; name: string; scopes: string[]; expiresAt?: string; now: string }) {
+    await this.db.prepare("INSERT INTO api_tokens (id, principal_type, principal_id, token_hash, name, scopes_json, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(input.id, input.principalType, input.principalId, input.tokenHash, input.name, JSON.stringify(input.scopes), input.expiresAt ?? null, input.now)
+      .run();
+    return { id: input.id, principalType: input.principalType, principalId: input.principalId, name: input.name, scopes: input.scopes, ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}), createdAt: input.now };
+  }
+
+  async findToken(tokenHash: string) {
+    const token = await this.db.prepare("SELECT * FROM api_tokens WHERE token_hash = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)")
+      .bind(tokenHash, new Date().toISOString())
+      .first<Record<string, string | null>>();
+    if (!token) return null;
+    await this.db.prepare("UPDATE api_tokens SET last_used_at = ? WHERE id = ?").bind(new Date().toISOString(), token.id).run();
+    if (token.principal_type === "service_account") {
+      const account = await this.db.prepare("SELECT * FROM service_accounts WHERE id = ? AND disabled_at IS NULL").bind(token.principal_id).first<Record<string, string | null>>();
+      if (!account) return null;
+      return { tokenId: String(token.id), principalType: "service_account" as const, principalId: String(account.id), name: String(account.name), workspaceId: String(account.workspace_id), scopes: JSON.parse(String(token.scopes_json)) as string[], ...(token.expires_at ? { expiresAt: String(token.expires_at) } : {}) };
+    }
+    return { tokenId: String(token.id), principalType: "user" as const, principalId: String(token.principal_id), name: String(token.name), workspaceId: undefined, scopes: JSON.parse(String(token.scopes_json)) as string[], ...(token.expires_at ? { expiresAt: String(token.expires_at) } : {}) };
+  }
+}
+
 export class D1WorkspaceRepository {
   constructor(private readonly db: Db) {}
 

@@ -5,6 +5,9 @@ import YAML from "yaml";
 const requiredPaths = [
   ["get", "/workspaces"],
   ["post", "/workspaces"],
+  ["get", "/auth/whoami"],
+  ["post", "/service-accounts"],
+  ["post", "/service-accounts/{serviceAccountId}/tokens"],
   ["get", "/workspaces/{workspaceId}/documents"],
   ["post", "/workspaces/{workspaceId}/documents"],
   ["get", "/documents/{documentId}"],

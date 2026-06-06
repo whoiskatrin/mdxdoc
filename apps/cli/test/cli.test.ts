@@ -14,6 +14,7 @@ describe("mdxdoc CLI smoke", () => {
     const { stdout } = await run(["--help"]);
     expect(stdout).toContain("login");
     expect(stdout).toContain("whoami");
+    expect(stdout).toContain("service-accounts");
     expect(stdout).toContain("docs");
     expect(stdout).toContain("propose");
     expect(stdout).toContain("comment");

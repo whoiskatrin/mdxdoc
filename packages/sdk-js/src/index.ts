@@ -21,6 +21,12 @@ export class MdxdocClient {
     return this.request("/health", { apiPrefix: false });
   }
 
+  auth = {
+    whoami: () => this.request("/auth/whoami"),
+    createServiceAccount: (body: { workspaceId?: string; name?: string }) => this.request("/service-accounts", { method: "POST", body }),
+    createServiceAccountToken: (serviceAccountId: string, body: { name?: string; scopes?: string[]; expiresInDays?: number }) => this.request(`/service-accounts/${serviceAccountId}/tokens`, { method: "POST", body })
+  };
+
   workspaces = {
     list: () => this.request<{ items: unknown[] }>("/workspaces"),
     create: (body: CreateWorkspaceRequest) => this.request("/workspaces", { method: "POST", body })

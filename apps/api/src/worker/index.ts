@@ -5,7 +5,7 @@ import { parseMdx, serializeMdx } from "@mdxdoc/mdx";
 import { canRole, type ApiError, type EffectiveRole, type HealthResponse } from "@mdxdoc/protocol";
 import { snapshotFromSource } from "../services/yjs-source-codec";
 import { ArtifactStore, type ArtifactsBinding } from "../services/artifact-store";
-import { D1ChangesetRepository, D1CommentRepository, D1DocumentRepository, D1PermissionRepository, D1SuggestionRepository, D1VersionRepository, D1WorkspaceRepository } from "../repositories/d1-repositories";
+import { D1AuthRepository, D1ChangesetRepository, D1CommentRepository, D1DocumentRepository, D1PermissionRepository, D1SuggestionRepository, D1VersionRepository, D1WorkspaceRepository } from "../repositories/d1-repositories";
 export { DocumentRoom } from "../durable-objects/document-room";
 
 export class MdxdocWorkflow extends WorkflowEntrypoint<Env, unknown> {
@@ -23,7 +23,7 @@ export type Env = {
   ARTIFACTS: ArtifactsBinding;
 };
 
-type Actor = { userId: string; role: EffectiveRole | undefined };
+type Actor = { userId: string; role: EffectiveRole | undefined; principalType?: "user" | "service_account"; scopes?: string[]; workspaceId?: string; tokenId?: string; name?: string };
 
 export default {
   async queue(batch: MessageBatch<unknown>, _env: Env, _ctx: ExecutionContext): Promise<void> {
@@ -49,7 +49,12 @@ export default {
 
       const method = request.method.toUpperCase();
       const path = url.pathname.replace(/^\/api\/v1/, "");
-      const actor = actorFromRequest(request);
+      const actor = await actorFromRequest(request, env);
+
+      if (method === "GET" && path === "/auth/whoami") return whoami(actor);
+      if (method === "POST" && path === "/service-accounts") return createServiceAccount(request, env, actor);
+      const serviceAccountToken = path.match(/^\/service-accounts\/([^/]+)\/tokens$/);
+      if (serviceAccountToken && method === "POST") return createServiceAccountToken(request, env, serviceAccountToken[1]!, actor);
 
       if (method === "GET" && path === "/workspaces") return json({ items: await repos(env).workspaces.list() });
       if (method === "POST" && path === "/workspaces") return createWorkspace(request, env, actor);
@@ -141,12 +146,40 @@ function repos(env: Env) {
     comments: new D1CommentRepository(env.DB),
     suggestions: new D1SuggestionRepository(env.DB),
     changesets: new D1ChangesetRepository(env.DB),
-    versions: new D1VersionRepository(env.DB)
+    versions: new D1VersionRepository(env.DB),
+    auth: new D1AuthRepository(env.DB)
   };
 }
 
-function actorFromRequest(request: Request): Actor {
-  return { userId: request.headers.get("x-user-id") ?? "local-user", role: (request.headers.get("x-mdxdoc-role") as EffectiveRole | null) ?? undefined };
+async function actorFromRequest(request: Request, env: Env): Promise<Actor> {
+  const auth = request.headers.get("authorization");
+  const bearer = auth?.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (bearer && bearer !== "local-dev-token") {
+    const principal = await repos(env).auth.findToken(await hashToken(bearer));
+    if (principal) return { userId: principal.principalId, role: "owner", principalType: principal.principalType, scopes: principal.scopes, tokenId: principal.tokenId, name: principal.name, ...(principal.workspaceId ? { workspaceId: principal.workspaceId } : {}) };
+  }
+  return { userId: request.headers.get("x-user-id") ?? "local-user", role: (request.headers.get("x-mdxdoc-role") as EffectiveRole | null) ?? undefined, principalType: "user", scopes: ["*"] };
+}
+
+async function whoami(actor: Actor) {
+  return json({ principal: { id: actor.userId, type: actor.principalType ?? "user", name: actor.name ?? actor.userId }, workspace: actor.workspaceId ? { id: actor.workspaceId, role: actor.role ?? "owner" } : null, scopes: actor.scopes ?? [] });
+}
+
+async function createServiceAccount(request: Request, env: Env, actor: Actor) {
+  const body = await readJson<{ workspaceId?: string; name?: string }>(request);
+  const workspaceId = body.workspaceId ?? actor.workspaceId ?? "ws1";
+  const now = new Date().toISOString();
+  const account = await repos(env).auth.createServiceAccount({ id: `svc_${crypto.randomUUID()}`, workspaceId, name: body.name ?? "Agent service account", createdBy: actor.userId, now });
+  return json(account, { status: 201 });
+}
+
+async function createServiceAccountToken(request: Request, env: Env, serviceAccountId: string, _actor: Actor) {
+  const body = await readJson<{ name?: string; scopes?: string[]; expiresInDays?: number }>(request);
+  const raw = `mdx_sat_${randomToken()}`;
+  const now = new Date().toISOString();
+  const expiresAt = body.expiresInDays ? new Date(Date.now() + body.expiresInDays * 86_400_000).toISOString() : undefined;
+  const token = await repos(env).auth.createToken({ id: `tok_${crypto.randomUUID()}`, principalType: "service_account", principalId: serviceAccountId, tokenHash: await hashToken(raw), name: body.name ?? "Agent token", scopes: body.scopes ?? ["*"], ...(expiresAt ? { expiresAt } : {}), now });
+  return json({ ...token, token: raw }, { status: 201 });
 }
 
 async function withPermission(env: Env, documentId: string, actor: Actor, action: Parameters<typeof canRole>[1], fn: () => Promise<Response>): Promise<Response> {
@@ -506,4 +539,16 @@ function renderInline(value: string) {
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[ch]!);
+}
+
+function randomToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashToken(token: string) {
+  const bytes = new TextEncoder().encode(token);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

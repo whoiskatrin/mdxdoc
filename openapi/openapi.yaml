@@ -6,6 +6,47 @@ servers:
   - url: http://localhost:8787/api/v1
   - url: https://mdxdoc-api.agents-b8a.workers.dev/api/v1
 paths:
+  /auth/whoami:
+    get:
+      summary: Get current API principal
+      responses:
+        '200': { description: OK }
+  /service-accounts:
+    post:
+      summary: Create an agent service account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workspaceId: { type: string }
+                name: { type: string }
+      responses:
+        '201': { description: Created }
+  /service-accounts/{serviceAccountId}/tokens:
+    post:
+      summary: Create a service account token
+      parameters:
+        - name: serviceAccountId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                scopes:
+                  type: array
+                  items: { type: string }
+                expiresInDays: { type: number }
+      responses:
+        '201': { description: Created }
   /workspaces:
     get:
       summary: List workspaces

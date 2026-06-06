@@ -218,7 +218,9 @@ CLI live smoke: passing when env var is set
 The CLI is a first-class client of the public API. `push` is safe by default: it creates a reviewable changeset plus suggestion. Direct overwrite requires `--apply`.
 
 ```bash
-mdxdoc login
+mdxdoc service-accounts create --workspace ws1 --name docs-agent
+mdxdoc service-account token svc_123 --name local-token --scope documents:read documents:write suggestions:write changesets:write
+printf "%s" "$MDXDOC_TOKEN" | mdxdoc login --token-stdin
 mdxdoc whoami
 
 mdxdoc workspaces
@@ -296,6 +298,30 @@ cd apps/web
 CLOUDFLARE_ACCOUNT_ID=<account-id> \
 pnpm exec wrangler pages deploy dist --project-name mdxdoc-web --branch main
 ```
+
+## Agent auth
+
+mdxdoc is agent-first. Browser OAuth is intentionally not the default. Use service-account tokens:
+
+```bash
+mdxdoc service-accounts create --workspace ws1 --name docs-agent
+mdxdoc service-account token svc_123 --name ci-token --scope documents:read documents:write comments:write suggestions:write changesets:write
+```
+
+The token is returned once. Store it in your agent secret store and use either:
+
+```bash
+MDXDOC_TOKEN=mdx_sat_... mdxdoc docs list
+```
+
+or persist it locally:
+
+```bash
+printf "%s" "$MDXDOC_TOKEN" | mdxdoc login --token-stdin
+mdxdoc whoami
+```
+
+Credential precedence is: `--token`, `MDXDOC_TOKEN`, then stored config.
 
 ## Current limitations
 

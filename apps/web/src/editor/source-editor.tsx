@@ -60,9 +60,15 @@ export function SourceEditor({ documentId, ydoc }: { documentId: string; ydoc: Y
     return () => window.removeEventListener("mdxdoc:source-updated", listener);
   }, [documentId, ytext]);
 
+  function switchMode(nextMode: Mode, nextSource: string) {
+    modeRef.current = nextMode;
+    setMode(nextMode);
+    setSource(nextSource);
+  }
+
   function updateSource(next: string) {
     setSource(next);
-    if (mode === "editing" && !suppressYjsWrite.current) replaceSharedText(next);
+    if (modeRef.current === "editing" && !suppressYjsWrite.current) replaceSharedText(next);
   }
 
   async function applyChanges() {
@@ -86,8 +92,7 @@ export function SourceEditor({ documentId, ydoc }: { documentId: string; ydoc: Y
       after: diff.after,
       baseVersion: version
     });
-    setSource(savedSource);
-    setMode("editing");
+    switchMode("editing", savedSource);
     setStatus(`suggestion proposed on version ${version}`);
     window.dispatchEvent(new CustomEvent("mdxdoc:suggestions-updated", { detail: { documentId } }));
   }
@@ -106,8 +111,8 @@ export function SourceEditor({ documentId, ydoc }: { documentId: string; ydoc: Y
     <div className="source-toolbar">
       <div><strong>{mode === "editing" ? "Markdown editor" : "Suggesting changes"}</strong><span> · {mode === "editing" ? `${status} · live draft sync on` : status}</span></div>
       <div className="source-actions">
-        <div className="mode-switch"><button className={mode === "editing" ? "active" : ""} onClick={() => { setMode("editing"); setSource(ytext.toString() || savedSource); }}>Editing</button><button className={mode === "suggesting" ? "active" : ""} onClick={() => { setMode("suggesting"); setSource(savedSource); }}>Suggesting</button></div>
-        {mode === "editing" ? <Button onClick={applyChanges} disabled={disabled || !changed}>Apply changes</Button> : <><Button variant="outline" onClick={() => { setSource(savedSource); setMode("editing"); }} disabled={disabled}>Discard</Button><Button onClick={proposeSuggestion} disabled={disabled || !changed}>Propose suggestion</Button></>}
+        <div className="mode-switch"><button className={mode === "editing" ? "active" : ""} onClick={() => switchMode("editing", ytext.toString() || savedSource)}>Editing</button><button className={mode === "suggesting" ? "active" : ""} onClick={() => switchMode("suggesting", savedSource)}>Suggesting</button></div>
+        {mode === "editing" ? <Button onClick={applyChanges} disabled={disabled || !changed}>Apply changes</Button> : <><Button variant="outline" onClick={() => switchMode("editing", savedSource)} disabled={disabled}>Discard</Button><Button onClick={proposeSuggestion} disabled={disabled || !changed}>Propose suggestion</Button></>}
       </div>
     </div>
     {mode === "suggesting" && <div className="suggesting-banner">Suggesting mode: edit the Markdown below. Your changes will not affect the document until someone accepts the suggestion.</div>}

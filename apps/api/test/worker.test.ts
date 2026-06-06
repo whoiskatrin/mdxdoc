@@ -29,6 +29,8 @@ class FakeD1 {
   changesets: Row[] = [];
   document_versions: Row[] = [];
   document_permissions: Row[] = [];
+  service_accounts: Row[] = [];
+  api_tokens: Row[] = [];
 
   prepare(sql: string) {
     const db = this;
@@ -46,7 +48,10 @@ class FakeD1 {
   }
 
   run(sql: string, v: unknown[]) {
-    if (sql.startsWith("INSERT INTO workspaces")) this.workspaces.push({ id: v[0], name: v[1], slug: v[2], created_by: v[3], created_at: v[4], updated_at: v[5] });
+    if (sql.startsWith("INSERT INTO service_accounts")) this.service_accounts.push({ id: v[0], workspace_id: v[1], name: v[2], created_by: v[3], created_at: v[4], updated_at: v[5], disabled_at: null });
+    else if (sql.startsWith("INSERT INTO api_tokens")) this.api_tokens.push({ id: v[0], principal_type: v[1], principal_id: v[2], token_hash: v[3], name: v[4], scopes_json: v[5], expires_at: v[6], created_at: v[7], revoked_at: null });
+    else if (sql.startsWith("UPDATE api_tokens SET last_used_at")) Object.assign(this.api_tokens.find((r) => r.id === v[1])!, { last_used_at: v[0] });
+    else if (sql.startsWith("INSERT INTO workspaces")) this.workspaces.push({ id: v[0], name: v[1], slug: v[2], created_by: v[3], created_at: v[4], updated_at: v[5] });
     else if (sql.startsWith("INSERT INTO documents")) this.documents.push({ id: v[0], workspace_id: v[1], title: v[2], format: v[3], status: "active", current_version: v[4], latest_snapshot_key: v[5], latest_tree_key: v[6], latest_source_key: v[7], artifact_repo: v[8], artifact_remote: v[9], artifact_commit: v[10], artifact_manifest_path: v[11], created_by: v[12], created_at: v[13], updated_at: v[14] });
     else if (sql.startsWith("UPDATE documents SET current_version")) Object.assign(this.findDoc(v[9]), { current_version: v[0], latest_source_key: v[1], latest_tree_key: v[2], latest_snapshot_key: v[3], artifact_repo: v[4], artifact_remote: v[5], artifact_commit: v[6], artifact_manifest_path: v[7], updated_at: v[8] });
     else if (sql.startsWith("UPDATE documents SET title")) Object.assign(this.findDoc(v[2]), { title: v[0], updated_at: v[1] });
@@ -65,6 +70,8 @@ class FakeD1 {
   }
 
   all(sql: string, v: unknown[]) {
+    if (sql.startsWith("SELECT * FROM api_tokens")) return { results: this.api_tokens.filter((t) => t.token_hash === v[0] && !t.revoked_at) };
+    if (sql.startsWith("SELECT * FROM service_accounts")) return { results: this.service_accounts.filter((s) => s.id === v[0] && !s.disabled_at) };
     if (sql.startsWith("SELECT * FROM workspaces")) return { results: this.workspaces };
     if (sql.startsWith("SELECT * FROM documents WHERE workspace_id")) return { results: this.documents.filter((d) => d.workspace_id === v[0] && d.status !== "deleted") };
     if (sql.startsWith("SELECT * FROM documents WHERE id")) return { results: this.documents.filter((d) => d.id === v[0] && d.status !== "deleted") };
@@ -111,6 +118,18 @@ function ctx(): ExecutionContext {
 async function json(res: Response) { return res.json() as Promise<any>; }
 
 describe("worker integration with local D1/Artifacts fakes", () => {
+  it("creates service account tokens and resolves whoami", async () => {
+    const e = env();
+    const service = await json(await worker.fetch(new Request("http://local/api/v1/service-accounts", { method: "POST", body: JSON.stringify({ workspaceId: "ws1", name: "Agent" }) }), e, ctx()));
+    expect(service.id).toMatch(/^svc_/);
+    const token = await json(await worker.fetch(new Request(`http://local/api/v1/service-accounts/${service.id}/tokens`, { method: "POST", body: JSON.stringify({ name: "agent-token", scopes: ["documents:read"] }) }), e, ctx()));
+    expect(token.token).toMatch(/^mdx_sat_/);
+    const whoami = await json(await worker.fetch(new Request("http://local/api/v1/auth/whoami", { headers: { authorization: `Bearer ${token.token}` } }), e, ctx()));
+    expect(whoami.principal.type).toBe("service_account");
+    expect(whoami.workspace.id).toBe("ws1");
+    expect(whoami.scopes).toContain("documents:read");
+  });
+
   it("creates a document and writes source/tree/snapshot artifacts", async () => {
     const e = env();
     await worker.fetch(new Request("http://local/api/v1/workspaces", { method: "POST", body: JSON.stringify({ name: "Acme", slug: "acme" }) }), e, ctx());
