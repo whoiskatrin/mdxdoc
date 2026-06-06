@@ -1,0 +1,1 @@
+{"name":"@mdxdoc/mdx","version":"0.1.0","type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@mdxdoc/document-model":"workspace:*","@tiptap/core":"latest","@tiptap/starter-kit":"latest","prosemirror-model":"^1.25.7"}}

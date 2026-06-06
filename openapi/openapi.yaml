@@ -1,0 +1,318 @@
+openapi: 3.1.0
+info:
+  title: mdxdoc API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8787/api/v1
+  - url: https://mdxdoc-api.agents-b8a.workers.dev/api/v1
+paths:
+  /workspaces:
+    get:
+      summary: List workspaces
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateWorkspaceRequest' }
+      responses:
+        '201': { description: Created }
+  /workspaces/{workspaceId}/documents:
+    get:
+      summary: List documents in a workspace
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create/import a document
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateDocumentRequest' }
+      responses:
+        '201': { description: Created }
+  /documents/{documentId}:
+    get:
+      summary: Get document metadata
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: OK }
+    patch:
+      summary: Update document metadata, currently title rename
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchDocumentRequest' }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Delete/archive document
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '204': { description: Deleted }
+  /documents/{documentId}/source:
+    get:
+      summary: Get canonical Markdown/MDX source
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: OK }
+    put:
+      summary: Direct source apply requiring baseVersion
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PutSourceRequest' }
+      responses:
+        '200': { description: OK }
+        '409': { description: Version conflict }
+        '422': { description: Invalid MDX }
+  /documents/{documentId}/tree:
+    get:
+      summary: Get normalized document tree
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: OK }
+  /documents/{documentId}/preview:
+    post:
+      summary: Render sanitized preview artifact
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: OK }
+  /documents/{documentId}/session:
+    get:
+      summary: Get y-partyserver collaboration connection metadata
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: OK }
+  /documents/{documentId}/comments:
+    get:
+      summary: List comment threads
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create a comment thread
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCommentRequest' }
+      responses:
+        '201': { description: Created }
+  /comments/{commentId}/resolve:
+    post:
+      summary: Resolve a comment thread
+      parameters:
+        - $ref: '#/components/parameters/CommentId'
+      responses:
+        '200': { description: OK }
+  /comments/{commentId}/reopen:
+    post:
+      summary: Reopen a resolved comment thread
+      parameters:
+        - $ref: '#/components/parameters/CommentId'
+      responses:
+        '200': { description: OK }
+  /documents/{documentId}/suggestions:
+    get:
+      summary: List suggestions
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create a source/document suggestion
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSuggestionRequest' }
+      responses:
+        '201': { description: Created }
+  /suggestions/{suggestionId}/accept:
+    post:
+      summary: Mark suggestion accepted
+      parameters:
+        - $ref: '#/components/parameters/SuggestionId'
+      responses:
+        '200': { description: OK }
+  /suggestions/{suggestionId}/reject:
+    post:
+      summary: Mark suggestion rejected
+      parameters:
+        - $ref: '#/components/parameters/SuggestionId'
+      responses:
+        '200': { description: OK }
+  /documents/{documentId}/changesets:
+    get:
+      summary: List changesets
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create changeset
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateChangesetRequest' }
+      responses:
+        '201': { description: Created }
+  /changesets/{changesetId}/accept:
+    post:
+      summary: Accept changeset
+      parameters:
+        - $ref: '#/components/parameters/ChangesetId'
+      responses:
+        '200': { description: OK }
+  /changesets/{changesetId}/reject:
+    post:
+      summary: Reject changeset
+      parameters:
+        - $ref: '#/components/parameters/ChangesetId'
+      responses:
+        '200': { description: OK }
+  /documents/{documentId}/versions:
+    get:
+      summary: List document versions
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create manual checkpoint version
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '201': { description: Created }
+  /documents/{documentId}/restore/{versionId}:
+    post:
+      summary: Restore version by id or version number
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/VersionId'
+      responses:
+        '200': { description: OK }
+components:
+  parameters:
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema: { type: string }
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema: { type: string }
+    CommentId:
+      name: commentId
+      in: path
+      required: true
+      schema: { type: string }
+    SuggestionId:
+      name: suggestionId
+      in: path
+      required: true
+      schema: { type: string }
+    ChangesetId:
+      name: changesetId
+      in: path
+      required: true
+      schema: { type: string }
+    VersionId:
+      name: versionId
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    CreateWorkspaceRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+    CreateDocumentRequest:
+      type: object
+      required: [title, format]
+      properties:
+        title: { type: string }
+        format: { type: string, enum: [md, mdx] }
+        source: { type: string }
+    PatchDocumentRequest:
+      type: object
+      properties:
+        title: { type: string }
+    PutSourceRequest:
+      type: object
+      required: [baseVersion, source]
+      properties:
+        baseVersion: { type: integer }
+        source: { type: string }
+    Anchor:
+      type: object
+      properties:
+        kind: { type: string }
+        nodeId: { type: string }
+        start: { type: integer }
+        end: { type: integer }
+        quote: { type: string }
+    CreateCommentRequest:
+      type: object
+      required: [body, anchor]
+      properties:
+        body: { type: string }
+        anchor: { $ref: '#/components/schemas/Anchor' }
+    CreateSuggestionRequest:
+      type: object
+      required: [type, anchor, baseVersion]
+      properties:
+        type: { type: string }
+        anchor: { $ref: '#/components/schemas/Anchor' }
+        before: {}
+        after: {}
+        baseVersion: { type: integer }
+    CreateChangesetRequest:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: string }
+        baseVersion: { type: integer }
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+            requestId: { type: string }

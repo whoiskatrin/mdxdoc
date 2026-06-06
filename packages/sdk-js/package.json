@@ -1,0 +1,1 @@
+{"name":"@mdxdoc/sdk-js","version":"0.1.0","type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@mdxdoc/protocol":"workspace:*"}}

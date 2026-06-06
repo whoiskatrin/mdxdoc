@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/document-model" },
+    { "path": "packages/protocol" },
+    { "path": "packages/mdx" },
+    { "path": "packages/sdk-js" },
+    { "path": "packages/ui" },
+    { "path": "apps/api" },
+    { "path": "apps/cli" },
+    { "path": "apps/web" }
+  ]
+}

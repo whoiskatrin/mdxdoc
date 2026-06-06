@@ -1,0 +1,1 @@
+{"name":"@mdxdoc/api","version":"0.1.0","type":"module","scripts":{"dev":"wrangler dev","test":"vitest run test"},"dependencies":{"@mdxdoc/document-model":"workspace:*","@mdxdoc/mdx":"workspace:*","@mdxdoc/protocol":"workspace:*","buffer":"^6.0.3","isomorphic-git":"^1.38.4","y-prosemirror":"^1.3.7","yjs":"latest"},"devDependencies":{"wrangler":"latest"}}
