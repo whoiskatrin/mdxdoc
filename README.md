@@ -249,11 +249,14 @@ mdxdoc preview doc_123
 mdxdoc export doc_123 --format mdx --out doc.mdx
 ```
 
-When running from source, prefix with:
+Install/link the local CLI once:
 
 ```bash
-pnpm exec tsx apps/cli/src/index.ts
+cd apps/cli
+npm link
 ```
+
+Then use `mdxdoc` directly from any directory.
 
 ## API contract
 

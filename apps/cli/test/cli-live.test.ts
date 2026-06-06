@@ -10,7 +10,7 @@ const apiUrl = process.env.MDXDOC_CLI_SMOKE_API_URL;
 const maybe = apiUrl ? describe : describe.skip;
 
 async function run(args: string[]) {
-  const { stdout } = await exec("tsx", ["apps/cli/src/index.ts", "--api-url", apiUrl!, ...args], { cwd: new URL("../../..", import.meta.url).pathname });
+  const { stdout } = await exec("node", ["apps/cli/bin/mdxdoc.js", "--api-url", apiUrl!, ...args], { cwd: new URL("../../..", import.meta.url).pathname });
   return JSON.parse(stdout);
 }
 

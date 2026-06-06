@@ -107,8 +107,12 @@ program.command("restore").argument("doc").argument("version").description("Rest
 
 program.exitOverride();
 program.parseAsync().catch((error) => {
+  if (error.code === "commander.helpDisplayed") {
+    process.exitCode = EXIT.OK;
+    return;
+  }
   console.error(error.message);
-  process.exitCode = error.code === "commander.helpDisplayed" ? EXIT.OK : EXIT.API;
+  process.exitCode = EXIT.API;
 });
 
 async function proposeSourceChange(doc: string, source: string, before: string, baseVersion: number, title: string, description?: string) {

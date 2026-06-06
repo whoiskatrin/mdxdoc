@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
 const exec = promisify(execFile);
-const cli = ["tsx", "apps/cli/src/index.ts"];
+const cli = ["node", "apps/cli/bin/mdxdoc.js"];
 
 async function run(args: string[]) {
   return exec(cli[0]!, [...cli.slice(1), ...args], { cwd: new URL("../../..", import.meta.url).pathname });

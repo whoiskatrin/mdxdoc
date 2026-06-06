@@ -1,1 +1,1 @@
-{"name":"@mdxdoc/cli","version":"0.1.0","type":"module","bin":{"mdxdoc":"./src/index.ts"},"dependencies":{"@mdxdoc/sdk-js":"workspace:*","commander":"latest"}}
+{"name":"@mdxdoc/cli","version":"0.1.0","type":"module","bin":{"mdxdoc":"./bin/mdxdoc.js"},"dependencies":{"@mdxdoc/sdk-js":"workspace:*","commander":"latest","tsx":"latest"}}

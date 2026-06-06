@@ -184,6 +184,9 @@ importers:
       commander:
         specifier: latest
         version: 15.0.0
+      tsx:
+        specifier: latest
+        version: 4.22.4
 
   apps/web:
     dependencies:
