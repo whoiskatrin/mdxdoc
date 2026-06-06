@@ -320,12 +320,9 @@ function CollabPanel({ documentId }: { documentId: string }) {
   }
 
   async function acceptSuggestion(suggestion: Record<string, unknown>) {
-    const after = typeof suggestion.after === "string" ? suggestion.after : "";
     const id = String(suggestion.id);
-    if (!after || !id) return;
+    if (!id) return;
     await withBusy(async () => {
-      const source = await client.docs.source(documentId);
-      await client.docs.putSource(documentId, { baseVersion: source.version, source: after });
       await client.docs.acceptSuggestion(id);
       window.dispatchEvent(new CustomEvent("mdxdoc:source-updated", { detail: { documentId } }));
     });
@@ -378,7 +375,8 @@ function VersionCard({ version, busy, onRestore }: { version: Record<string, unk
 
 function ChangesetCard({ changeset, busy, onTransition }: { changeset: Record<string, unknown>; busy: boolean; onTransition: (id: string, action: "accept" | "reject") => void }) {
   const status = String(changeset.status ?? "pending");
-  return <div className="collab-item"><div className="collab-item-head"><strong>{String(changeset.title ?? "Changeset")}</strong><Badge variant="outline" className={status}>{friendlyStatus(status)}</Badge></div><span className="collab-meta">{formatDate(String(changeset.updatedAt ?? changeset.updated_at ?? ""))}</span>{status === "pending" && <div className="suggestion-actions"><Button size="sm" disabled={busy} onClick={() => onTransition(String(changeset.id), "accept")}>Accept</Button><Button variant="outline" size="sm" disabled={busy} onClick={() => onTransition(String(changeset.id), "reject")}>Reject</Button></div>}</div>;
+  const suggestionIds = Array.isArray(changeset.suggestionIds) ? changeset.suggestionIds : [];
+  return <div className="collab-item"><div className="collab-item-head"><strong>{String(changeset.title ?? "Changeset")}</strong><Badge variant="outline" className={status}>{friendlyStatus(status)}</Badge></div><span className="collab-meta">{suggestionIds.length} suggestion{suggestionIds.length === 1 ? "" : "s"} · {formatDate(String(changeset.updatedAt ?? changeset.updated_at ?? ""))}</span>{status === "pending" && <div className="suggestion-actions"><Button size="sm" disabled={busy} onClick={() => onTransition(String(changeset.id), "accept")}>Accept</Button><Button variant="outline" size="sm" disabled={busy} onClick={() => onTransition(String(changeset.id), "reject")}>Reject</Button></div>}</div>;
 }
 
 function CommentCard({ comment, busy, onResolve }: { comment: Record<string, unknown>; busy: boolean; onResolve: (id: string) => void }) {
@@ -389,8 +387,26 @@ function CommentCard({ comment, busy, onResolve }: { comment: Record<string, unk
 
 function SuggestionCard({ suggestion, busy, onAccept, onReject }: { suggestion: Record<string, unknown>; busy: boolean; onAccept: (suggestion: Record<string, unknown>) => void; onReject: (id: string) => void }) {
   const status = String(suggestion.status ?? "pending");
+  const before = typeof suggestion.before === "string" ? suggestion.before : "";
   const after = typeof suggestion.after === "string" ? suggestion.after : "";
-  return <div className="collab-item"><div className="collab-item-head"><strong>Replace document source</strong><Badge variant="outline" className={status}>{friendlyStatus(status)}</Badge></div>{after && <pre className="suggestion-preview">{after.slice(0, 220)}{after.length > 220 ? "…" : ""}</pre>}{status === "pending" && <div className="suggestion-actions"><Button size="sm" disabled={busy || !after} onClick={() => onAccept(suggestion)}>Accept</Button><Button variant="outline" size="sm" disabled={busy} onClick={() => onReject(String(suggestion.id))}>Reject</Button></div>}</div>;
+  const type = String(suggestion.type ?? "replace_source_range");
+  const conflictReason = typeof suggestion.conflictReason === "string" ? suggestion.conflictReason : "";
+  return <div className="collab-item"><div className="collab-item-head"><strong>{suggestionTitle(type)}</strong><Badge variant="outline" className={status}>{friendlyStatus(status)}</Badge></div>{conflictReason && <p className="conflict-note">{conflictReason}</p>}<SourceDiff before={before} after={after} />{status === "pending" && <div className="suggestion-actions"><Button size="sm" disabled={busy} onClick={() => onAccept(suggestion)}>Accept</Button><Button variant="outline" size="sm" disabled={busy} onClick={() => onReject(String(suggestion.id))}>Reject</Button></div>}</div>;
+}
+
+function SourceDiff({ before, after }: { before: string; after: string }) {
+  const beforeLines = before.split("\n");
+  const afterLines = after.split("\n");
+  if (!before && !after) return null;
+  return <div className="source-diff" aria-label="Suggestion diff"><div>{beforeLines.filter(Boolean).slice(0, 12).map((line, index) => <pre key={`del-${index}`} className="diff-line diff-delete">- {line}</pre>)}</div><div>{afterLines.filter(Boolean).slice(0, 12).map((line, index) => <pre key={`add-${index}`} className="diff-line diff-add">+ {line}</pre>)}</div></div>;
+}
+
+function suggestionTitle(type: string) {
+  if (type === "replace_document_source") return "Replace document source";
+  if (type === "replace_source_range") return "Replace source range";
+  if (type === "insert_text") return "Insert text";
+  if (type === "delete_text") return "Delete text";
+  return "Suggested edit";
 }
 
 function commentTitle(comment: Record<string, unknown>) {
@@ -407,6 +423,8 @@ function friendlyStatus(status: string) {
   if (status === "pending") return "Needs review";
   if (status === "accepted") return "Accepted";
   if (status === "rejected") return "Rejected";
+  if (status === "conflicted") return "Conflicted";
+  if (status === "partially_accepted") return "Partially accepted";
   return status;
 }
 

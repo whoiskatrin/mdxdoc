@@ -99,9 +99,9 @@ export default {
       if (changesets && method === "GET") return withPermission(env, changesets[1]!, actor, "view", async () => json({ items: await repos(env).changesets.list(changesets[1]!) }));
       if (changesets && method === "POST") return withPermission(env, changesets[1]!, actor, "suggest", () => createChangeset(request, env, changesets[1]!, actor));
       const changesetAccept = path.match(/^\/changesets\/([^/]+)\/accept$/);
-      if (changesetAccept && method === "POST") return setChangesetStatus(env, changesetAccept[1]!, "accepted");
+      if (changesetAccept && method === "POST") return setChangesetStatus(env, changesetAccept[1]!, "accepted", actor);
       const changesetReject = path.match(/^\/changesets\/([^/]+)\/reject$/);
-      if (changesetReject && method === "POST") return setChangesetStatus(env, changesetReject[1]!, "rejected");
+      if (changesetReject && method === "POST") return setChangesetStatus(env, changesetReject[1]!, "rejected", actor);
 
       const versions = path.match(/^\/documents\/([^/]+)\/versions$/);
       if (versions && method === "GET") return withPermission(env, versions[1]!, actor, "view", async () => json({ items: await repos(env).versions.list(versions[1]!) }));
@@ -316,9 +316,26 @@ async function createChangeset(request: Request, env: Env, documentId: string, a
   return json(await repos(env).changesets.create({ id: crypto.randomUUID(), documentId, authorId: actor.userId, title: body.title ?? "Untitled changeset", ...(body.description ? { description: body.description } : {}), baseVersion: body.baseVersion ?? doc.current_version, now: new Date().toISOString() }), { status: 201 });
 }
 
-async function setChangesetStatus(env: Env, id: string, status: "accepted" | "rejected") {
-  await repos(env).changesets.setStatus(id, status, new Date().toISOString());
-  return json({ ok: true, changesetId: id, status });
+async function setChangesetStatus(env: Env, id: string, status: "accepted" | "rejected", actor: Actor) {
+  const store = repos(env);
+  const changeset = await store.changesets.get(id);
+  if (!changeset) return jsonError("not_found", "Changeset not found", 404, crypto.randomUUID());
+  if (status === "rejected") {
+    for (const suggestion of await store.suggestions.listForChangeset(id)) if (suggestion.status === "pending") await store.suggestions.setStatus(suggestion.id, "rejected");
+    await store.changesets.setStatus(id, "rejected", new Date().toISOString());
+    return json({ ok: true, changesetId: id, status: "rejected" });
+  }
+  let accepted = 0;
+  let conflicted = 0;
+  for (const suggestion of await store.suggestions.listForChangeset(id)) {
+    if (suggestion.status !== "pending") continue;
+    const result = await applySuggestion(env, suggestion.id, actor);
+    if (result.ok) accepted += 1;
+    else conflicted += 1;
+  }
+  const nextStatus = conflicted > 0 ? "conflicted" : "accepted";
+  await store.changesets.setStatus(id, nextStatus, new Date().toISOString());
+  return json({ ok: conflicted === 0, changesetId: id, status: nextStatus, accepted, conflicted });
 }
 
 async function createSuggestion(request: Request, env: Env, documentId: string, actor: Actor) {
@@ -326,10 +343,61 @@ async function createSuggestion(request: Request, env: Env, documentId: string, 
   return json(await repos(env).suggestions.create({ documentId, authorId: actor.userId, type: body.type, anchor: body.anchor as never, before: body.before, after: body.after, baseVersion: body.baseVersion, ...(body.changesetId ? { changesetId: body.changesetId } : {}) }), { status: 201 });
 }
 async function setSuggestionStatus(env: Env, suggestionId: string, status: "accepted" | "rejected", actor: Actor) {
-  // MVP conflict/apply engine comes next; status transition is permission-gated.
   if (actor.role && !canRole(actor.role, "accept")) return jsonError("forbidden", `Role ${actor.role} cannot accept`, 403, crypto.randomUUID());
-  await repos(env).suggestions.setStatus(suggestionId, status);
-  return json({ ok: true, suggestionId, status });
+  if (status === "rejected") {
+    await repos(env).suggestions.setStatus(suggestionId, "rejected");
+    return json({ ok: true, suggestionId, status });
+  }
+  const result = await applySuggestion(env, suggestionId, actor);
+  if (!result.ok) return json({ ok: false, suggestionId, status: "conflicted", conflictReason: result.reason }, { status: 409 });
+  return json({ ok: true, suggestionId, status: "accepted", documentId: result.documentId, version: result.version, source: result.source });
+}
+
+async function applySuggestion(env: Env, suggestionId: string, actor: Actor): Promise<{ ok: true; documentId: string; version: number; source: string } | { ok: false; reason: string }> {
+  const store = repos(env);
+  const suggestion = await store.suggestions.get(suggestionId);
+  if (!suggestion) return { ok: false, reason: "Suggestion not found" };
+  const doc = await store.documents.getForSource(String(suggestion.documentId));
+  if (!doc) return { ok: false, reason: "Document not found" };
+  const current = await new ArtifactStore(env.ARTIFACTS).readText({ repoName: doc.artifact_repo, remote: doc.artifact_remote ?? undefined, commit: doc.artifact_commit, path: doc.latest_source_key! });
+  const next = applySourceSuggestion(current, suggestion);
+  if (!next.ok) {
+    await store.suggestions.setStatus(suggestionId, "conflicted", next.reason);
+    return { ok: false, reason: next.reason };
+  }
+  const parsed = parseMdx(next.source);
+  if (!parsed.ok) {
+    await store.suggestions.setStatus(suggestionId, "conflicted", "Accepted source would not parse as MDX");
+    return { ok: false, reason: "Accepted source would not parse as MDX" };
+  }
+  const version = doc.current_version + 1;
+  const snapshot = snapshotFromSource(next.source);
+  const artifact = await new ArtifactStore(env.ARTIFACTS).commitDocumentVersion({ workspaceId: doc.workspace_id, documentId: doc.id, version, reason: `suggestion:${suggestionId}`, source: next.source, treeJson: JSON.stringify(parsed.tree), snapshot, repoName: doc.artifact_repo, remote: doc.artifact_remote ?? undefined });
+  const now = new Date().toISOString();
+  await store.documents.updateArtifacts({ id: doc.id, version, sourceKey: artifact.sourcePath, treeKey: artifact.treePath, snapshotKey: artifact.snapshotPath, artifactRepo: artifact.repo, artifactRemote: artifact.remote, artifactCommit: artifact.commit, artifactManifestPath: artifact.manifestPath, now });
+  await createVersionRecord(env, { documentId: doc.id, version, artifact, createdBy: actor.userId, reason: `suggestion:${suggestionId}`, now });
+  await store.suggestions.setStatus(suggestionId, "accepted");
+  return { ok: true, documentId: doc.id, version, source: next.source };
+}
+
+function applySourceSuggestion(current: string, suggestion: { type: string; anchor: unknown; before?: unknown; after?: unknown; baseVersion: number }): { ok: true; source: string } | { ok: false; reason: string } {
+  const before = typeof suggestion.before === "string" ? suggestion.before : "";
+  const after = typeof suggestion.after === "string" ? suggestion.after : "";
+  if (suggestion.type === "replace_document_source") {
+    if (before && current !== before) return { ok: false, reason: "Document changed since suggestion was created" };
+    return { ok: true, source: after };
+  }
+  if (suggestion.type === "replace_source_range" || suggestion.type === "replace_text") {
+    const anchor = suggestion.anchor as { kind?: string; start?: number; end?: number };
+    if (anchor.kind !== "source_range" || typeof anchor.start !== "number" || typeof anchor.end !== "number") return { ok: false, reason: "Suggestion is missing a source range" };
+    if (current.slice(anchor.start, anchor.end) === before) return { ok: true, source: current.slice(0, anchor.start) + after + current.slice(anchor.end) };
+    if (before) {
+      const first = current.indexOf(before);
+      if (first >= 0 && first === current.lastIndexOf(before)) return { ok: true, source: current.slice(0, first) + after + current.slice(first + before.length) };
+    }
+    return { ok: false, reason: "Source range no longer matches the suggested text" };
+  }
+  return { ok: false, reason: `Unsupported suggestion type ${suggestion.type}` };
 }
 function renderPreviewHtml(source: string) {
   const body = renderMarkdown(source);

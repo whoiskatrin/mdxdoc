@@ -150,21 +150,17 @@ export class D1SuggestionRepository {
 
   async list(documentId: string): Promise<Suggestion[]> {
     const rows = await this.db.prepare("SELECT * FROM suggestions WHERE document_id = ? ORDER BY updated_at DESC").bind(documentId).all<Record<string, string | number | null>>();
-    return rows.results.map((row) => ({
-      id: row.id as never,
-      documentId: row.document_id as never,
-      authorId: row.author_id as never,
-      ...(row.changeset_id ? { changesetId: row.changeset_id as never } : {}),
-      type: row.type as SuggestionType,
-      anchor: JSON.parse(String(row.anchor_json)) as Anchor,
-      ...(row.before_json ? { before: JSON.parse(String(row.before_json)) as unknown } : {}),
-      ...(row.after_json ? { after: JSON.parse(String(row.after_json)) as unknown } : {}),
-      status: row.status as Suggestion["status"],
-      ...(row.conflict_reason ? { conflictReason: String(row.conflict_reason) } : {}),
-      baseVersion: Number(row.base_version),
-      createdAt: String(row.created_at),
-      updatedAt: String(row.updated_at)
-    }));
+    return rows.results.map(suggestionRow);
+  }
+
+  async listForChangeset(changesetId: string): Promise<Suggestion[]> {
+    const rows = await this.db.prepare("SELECT * FROM suggestions WHERE changeset_id = ? ORDER BY created_at ASC").bind(changesetId).all<Record<string, string | number | null>>();
+    return rows.results.map(suggestionRow);
+  }
+
+  async get(id: string): Promise<Suggestion | null> {
+    const row = await this.db.prepare("SELECT * FROM suggestions WHERE id = ?").bind(id).first<Record<string, string | number | null>>();
+    return row ? suggestionRow(row) : null;
   }
 
   async create(input: CreateSuggestionInput): Promise<Suggestion> {
@@ -183,12 +179,40 @@ export class D1SuggestionRepository {
   }
 }
 
+function suggestionRow(row: Record<string, string | number | null>): Suggestion {
+  return {
+    id: row.id as never,
+    documentId: row.document_id as never,
+    authorId: row.author_id as never,
+    ...(row.changeset_id ? { changesetId: row.changeset_id as never } : {}),
+    type: row.type as SuggestionType,
+    anchor: JSON.parse(String(row.anchor_json)) as Anchor,
+    ...(row.before_json ? { before: JSON.parse(String(row.before_json)) as unknown } : {}),
+    ...(row.after_json ? { after: JSON.parse(String(row.after_json)) as unknown } : {}),
+    status: row.status as Suggestion["status"],
+    ...(row.conflict_reason ? { conflictReason: String(row.conflict_reason) } : {}),
+    baseVersion: Number(row.base_version),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at)
+  };
+}
+
 export class D1ChangesetRepository {
   constructor(private readonly db: Db) {}
 
   async list(documentId: string): Promise<ChangeSet[]> {
     const rows = await this.db.prepare("SELECT * FROM changesets WHERE document_id = ? ORDER BY updated_at DESC").bind(documentId).all<Record<string, string | number>>();
-    return rows.results.map((row) => ({ id: row.id as never, documentId: row.document_id as never, authorId: row.author_id as never, title: String(row.title), ...(row.description ? { description: String(row.description) } : {}), suggestionIds: [], status: row.status as ChangeSet["status"], baseVersion: Number(row.base_version), createdAt: String(row.created_at), updatedAt: String(row.updated_at) }));
+    const suggestions = await this.db.prepare("SELECT id, changeset_id FROM suggestions WHERE document_id = ? AND changeset_id IS NOT NULL").bind(documentId).all<Record<string, string>>();
+    const byChangeset = new Map<string, string[]>();
+    for (const suggestion of suggestions.results) if (suggestion.changeset_id && suggestion.id) byChangeset.set(suggestion.changeset_id, [...(byChangeset.get(suggestion.changeset_id) ?? []), suggestion.id]);
+    return rows.results.map((row) => changesetRow(row, byChangeset.get(String(row.id)) ?? []));
+  }
+
+  async get(id: string): Promise<ChangeSet | null> {
+    const row = await this.db.prepare("SELECT * FROM changesets WHERE id = ?").bind(id).first<Record<string, string | number>>();
+    if (!row) return null;
+    const suggestions = await this.db.prepare("SELECT id FROM suggestions WHERE changeset_id = ? ORDER BY created_at ASC").bind(id).all<Record<string, string>>();
+    return changesetRow(row, suggestions.results.map((suggestion) => suggestion.id).filter((value): value is string => Boolean(value)));
   }
 
   async create(input: { id: string; documentId: string; authorId: string; title: string; description?: string; baseVersion: number; now: string }) {
@@ -201,6 +225,10 @@ export class D1ChangesetRepository {
   async setStatus(id: string, status: ChangeSet["status"], now: string) {
     await this.db.prepare("UPDATE changesets SET status = ?, updated_at = ? WHERE id = ?").bind(status, now, id).run();
   }
+}
+
+function changesetRow(row: Record<string, string | number>, suggestionIds: string[]): ChangeSet {
+  return { id: row.id as never, documentId: row.document_id as never, authorId: row.author_id as never, title: String(row.title), ...(row.description ? { description: String(row.description) } : {}), suggestionIds: suggestionIds as never[], status: row.status as ChangeSet["status"], baseVersion: Number(row.base_version), createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
 }
 
 export class D1VersionRepository {

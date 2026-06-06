@@ -163,7 +163,7 @@ test("source suggestions do not mutate until accepted", async ({ page }) => {
   await expect(page.locator(".source-textarea")).toHaveValue(original);
 
   await page.getByRole("tab", { name: "Suggestions" }).click();
-  await expect(page.getByText("Replace document source")).toBeVisible();
+  await expect(page.getByText(/Replace (document source|source range)/)).toBeVisible();
   await page.getByRole("button", { name: "Accept" }).click();
   await expect(page.locator(".source-textarea")).toHaveValue(proposed);
 

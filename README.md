@@ -19,11 +19,11 @@ Current app: a working MVP with dashboard, raw Markdown editing, preview, real-t
 - Quick preview surface
 - Real-time typing sync between collaborators in Editing mode
 - Suggesting mode for reviewable source-level suggestions
-- Accept/reject suggestions
+- Source-range diff cards with accept/reject and conflict reporting
 - General comments and selected-source comments
 - Resolve comments
 - Versions tab with checkpoint/restore support
-- Changesets tab with create/accept/reject metadata flow
+- Changesets tab with create/accept/reject and grouped pending-suggestion application
 - Command palette via `Cmd/Ctrl+K`
 - Public SDK used by web and CLI
 - OpenAPI contract
@@ -291,14 +291,14 @@ pnpm exec wrangler pages deploy dist --project-name mdxdoc-web --branch main
 ## Current limitations
 
 - WYSIWYG/TipTap visual editor is not active in the current UI; raw Markdown is the primary editor.
-- Changeset accept/reject is metadata-only; applying grouped suggestions belongs to Phase 4.
+- Changeset accept applies pending source suggestions, but rich grouped diff/reorder controls are still evolving.
 - Preview is a safe Markdown-ish render, not full production MDX component rendering.
 - Auth is local/prototype-grade; real sharing and roles need hardening.
 - Comment anchoring supports selected source ranges, but robust reattachment/orphaning is a later phase.
 
 ## Roadmap
 
-1. Phase 4: real granular suggestions, diffs, changeset application/conflict handling
+1. Continue Phase 4: richer grouped changeset review UI and conflict resolution controls
 2. Phase 5: robust comment anchors, reattachment, orphan states
 3. Phase 6: WYSIWYG returns with TipTap, component cards, prop inspector
 4. Phase 7: richer version history UI and restore workflows

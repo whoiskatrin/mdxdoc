@@ -76,7 +76,12 @@ class FakeD1 {
     if (sql.startsWith("SELECT * FROM comment_messages")) return { results: this.comment_messages.filter((m) => this.comment_threads.some((t) => t.document_id === v[0] && t.id === m.thread_id) && !m.deleted_at) };
     if (sql.startsWith("SELECT * FROM document_versions WHERE document_id = ? AND")) return { results: this.document_versions.filter((r) => r.document_id === v[0] && (r.id === v[1] || String(r.version_number) === v[2])) };
     if (sql.startsWith("SELECT * FROM document_versions")) return { results: this.document_versions.filter((r) => r.document_id === v[0]).sort((a, b) => b.version_number - a.version_number) };
+    if (sql.startsWith("SELECT * FROM suggestions WHERE changeset_id")) return { results: this.suggestions.filter((s) => s.changeset_id === v[0]) };
+    if (sql.startsWith("SELECT * FROM suggestions WHERE id")) return { results: this.suggestions.filter((s) => s.id === v[0]) };
+    if (sql.startsWith("SELECT id, changeset_id FROM suggestions")) return { results: this.suggestions.filter((s) => s.document_id === v[0] && s.changeset_id).map((s) => ({ id: s.id, changeset_id: s.changeset_id })) };
+    if (sql.startsWith("SELECT id FROM suggestions WHERE changeset_id")) return { results: this.suggestions.filter((s) => s.changeset_id === v[0]).map((s) => ({ id: s.id })) };
     if (sql.startsWith("SELECT * FROM suggestions")) return { results: this.suggestions.filter((s) => s.document_id === v[0]) };
+    if (sql.startsWith("SELECT * FROM changesets WHERE id")) return { results: this.changesets.filter((c) => c.id === v[0]) };
     if (sql.startsWith("SELECT * FROM changesets")) return { results: this.changesets.filter((c) => c.document_id === v[0]) };
     return { results: [] };
   }
@@ -154,8 +159,34 @@ describe("worker integration with local D1/Artifacts fakes", () => {
     expect(list.items).toHaveLength(1);
     const accepted = await json(await worker.fetch(new Request(`http://local/api/v1/suggestions/${suggestion.id}/accept`, { method: "POST" }), e, ctx()));
     expect(accepted.status).toBe("accepted");
+    const source = await json(await worker.fetch(new Request(`http://local/api/v1/documents/${created.id}/source`), e, ctx()));
+    expect(source.source).toBe("# After\n");
     const rejected = await json(await worker.fetch(new Request(`http://local/api/v1/suggestions/${suggestion.id}/reject`, { method: "POST" }), e, ctx()));
     expect(rejected.status).toBe("rejected");
+  });
+
+  it("applies source-range suggestions and reports conflicts", async () => {
+    const e = env();
+    const created = await json(await worker.fetch(new Request("http://local/api/v1/workspaces/ws1/documents", { method: "POST", body: JSON.stringify({ title: "Range", format: "mdx", source: "# Title\n\nOld paragraph\n" }) }), e, ctx()));
+    const suggestion = await json(await worker.fetch(new Request(`http://local/api/v1/documents/${created.id}/suggestions`, { method: "POST", body: JSON.stringify({ type: "replace_source_range", anchor: { kind: "source_range", start: 9, end: 22, quote: "Old paragraph" }, before: "Old paragraph", after: "New paragraph", baseVersion: 1 }) }), e, ctx()));
+    const accepted = await json(await worker.fetch(new Request(`http://local/api/v1/suggestions/${suggestion.id}/accept`, { method: "POST" }), e, ctx()));
+    expect(accepted.source).toContain("New paragraph");
+
+    const stale = await json(await worker.fetch(new Request(`http://local/api/v1/documents/${created.id}/suggestions`, { method: "POST", body: JSON.stringify({ type: "replace_source_range", anchor: { kind: "source_range", start: 9, end: 22, quote: "Old paragraph" }, before: "Old paragraph", after: "Other paragraph", baseVersion: 1 }) }), e, ctx()));
+    const conflicted = await worker.fetch(new Request(`http://local/api/v1/suggestions/${stale.id}/accept`, { method: "POST" }), e, ctx());
+    expect(conflicted.status).toBe(409);
+    expect((await json(conflicted)).status).toBe("conflicted");
+  });
+
+  it("accepts changesets by applying their pending suggestions", async () => {
+    const e = env();
+    const created = await json(await worker.fetch(new Request("http://local/api/v1/workspaces/ws1/documents", { method: "POST", body: JSON.stringify({ title: "Changeset apply", format: "mdx", source: "# One\n" }) }), e, ctx()));
+    const changeset = await json(await worker.fetch(new Request(`http://local/api/v1/documents/${created.id}/changesets`, { method: "POST", body: JSON.stringify({ title: "Update heading" }) }), e, ctx()));
+    await worker.fetch(new Request(`http://local/api/v1/documents/${created.id}/suggestions`, { method: "POST", body: JSON.stringify({ changesetId: changeset.id, type: "replace_source_range", anchor: { kind: "source_range", start: 2, end: 5, quote: "One" }, before: "One", after: "Two", baseVersion: 1 }) }), e, ctx());
+    const accepted = await json(await worker.fetch(new Request(`http://local/api/v1/changesets/${changeset.id}/accept`, { method: "POST" }), e, ctx()));
+    expect(accepted.status).toBe("accepted");
+    const source = await json(await worker.fetch(new Request(`http://local/api/v1/documents/${created.id}/source`), e, ctx()));
+    expect(source.source).toBe("# Two\n");
   });
 
   it("lists versions, checkpoints, and restores versions", async () => {

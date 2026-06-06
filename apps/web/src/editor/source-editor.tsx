@@ -14,6 +14,8 @@ export function SourceEditor({ documentId, ydoc }: { documentId: string; ydoc: Y
   const [status, setStatus] = React.useState("loading source…");
   const ytext = React.useMemo(() => ydoc.getText(`source:${documentId}`), [ydoc, documentId]);
   const suppressYjsWrite = React.useRef(false);
+  const modeRef = React.useRef<Mode>(mode);
+  React.useEffect(() => { modeRef.current = mode; }, [mode]);
 
   function replaceSharedText(next: string) {
     ydoc.transact(() => {
@@ -38,6 +40,7 @@ export function SourceEditor({ documentId, ydoc }: { documentId: string; ydoc: Y
 
   React.useEffect(() => {
     const observer = () => {
+      if (modeRef.current !== "editing") return;
       const next = ytext.toString();
       suppressYjsWrite.current = true;
       setSource(next);
@@ -75,11 +78,12 @@ export function SourceEditor({ documentId, ydoc }: { documentId: string; ydoc: Y
 
   async function proposeSuggestion() {
     setStatus("saving suggestion…");
+    const diff = sourceRangeDiff(savedSource, source);
     await client.docs.createSuggestion(documentId, {
-      type: "replace_document_source",
-      anchor: { kind: "source_range", start: 0, end: savedSource.length, quote: "document" },
-      before: savedSource,
-      after: source,
+      type: diff.type,
+      anchor: { kind: "source_range", start: diff.start, end: diff.end, quote: diff.before || "insertion" },
+      before: diff.before,
+      after: diff.after,
       baseVersion: version
     });
     setSource(savedSource);
@@ -109,4 +113,16 @@ export function SourceEditor({ documentId, ydoc }: { documentId: string; ydoc: Y
     {mode === "suggesting" && <div className="suggesting-banner">Suggesting mode: edit the Markdown below. Your changes will not affect the document until someone accepts the suggestion.</div>}
     <textarea className="source-textarea" spellCheck={false} value={source} onChange={(e) => updateSource(e.target.value)} onSelect={(event) => publishSelection(event.currentTarget)} onKeyUp={(event) => publishSelection(event.currentTarget)} onMouseUp={(event) => publishSelection(event.currentTarget)} />
   </div>;
+}
+
+function sourceRangeDiff(before: string, after: string) {
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start += 1;
+  let beforeEnd = before.length;
+  let afterEnd = after.length;
+  while (beforeEnd > start && afterEnd > start && before[beforeEnd - 1] === after[afterEnd - 1]) {
+    beforeEnd -= 1;
+    afterEnd -= 1;
+  }
+  return { type: "replace_source_range", start, end: beforeEnd, before: before.slice(start, beforeEnd), after: after.slice(start, afterEnd) };
 }

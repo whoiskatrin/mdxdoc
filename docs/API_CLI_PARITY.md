@@ -38,8 +38,8 @@ Status legend:
 | Reject suggestion | Reject button | `POST /api/v1/suggestions/:id/reject` | `client.docs.rejectSuggestion()` | `mdxdoc suggestion reject <id>` | API/CLI help smoke | ✅ |
 | List changesets | Changesets tab | `GET /api/v1/documents/:id/changesets` | `client.docs.changesets()` | `mdxdoc changesets <doc>` | E2E/API | ✅ |
 | Create changeset | Create changeset button | `POST /api/v1/documents/:id/changesets` | `client.docs.createChangeset()` | `mdxdoc changeset create <doc>` | E2E/API/CLI live smoke | ✅ |
-| Accept changeset | Accept button | `POST /api/v1/changesets/:id/accept` | `client.docs.acceptChangeset()` | `mdxdoc changeset accept <id>` | API | 🟡 metadata-only |
-| Reject changeset | Reject button | `POST /api/v1/changesets/:id/reject` | `client.docs.rejectChangeset()` | `mdxdoc changeset reject <id>` | API/CLI live smoke | 🟡 metadata-only |
+| Accept changeset | Accept button | `POST /api/v1/changesets/:id/accept` | `client.docs.acceptChangeset()` | `mdxdoc changeset accept <id>` | API | ✅ applies pending source suggestions, reports conflicts |
+| Reject changeset | Reject button | `POST /api/v1/changesets/:id/reject` | `client.docs.rejectChangeset()` | `mdxdoc changeset reject <id>` | API/CLI live smoke | ✅ rejects pending suggestions |
 | List versions | Versions tab | `GET /api/v1/documents/:id/versions` | `client.docs.versions()` | `mdxdoc versions <doc>` | E2E/API/CLI live smoke | ✅ |
 | Create checkpoint | Create checkpoint button | `POST /api/v1/documents/:id/versions` | `client.docs.checkpoint()` | `mdxdoc checkpoint <doc>` | E2E/API/CLI live smoke | ✅ |
 | Restore version | Restore button | `POST /api/v1/documents/:id/restore/:versionId` | `client.docs.restore()` | `mdxdoc restore <doc> <version>` | API | ✅ |
@@ -49,7 +49,7 @@ Status legend:
 
 1. `comment reopen` exists in API but does not yet have SDK/CLI/UI helpers.
 2. `export` is CLI-only via `GET /source`; there is no separate `/export.mdx` endpoint yet.
-3. Changeset accept/reject is metadata-only. Real application of grouped suggestions belongs to Phase 4.
+3. Changeset accept applies pending source suggestions, but rich grouped diff/reorder controls are still future work.
 4. Version restore has UI/API/CLI, but E2E currently verifies visibility/checkpoint rather than full restore UI flow.
 5. OpenAPI tests currently validate route/schema presence, not full response body schemas.
 
